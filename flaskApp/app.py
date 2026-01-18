@@ -24,6 +24,16 @@ num_scaler = pickle.load(open('../flaskApp/tech_models/num_scaler.pkl', 'rb'))
 kNN =  pickle.load(open('../flaskApp/ml_models/kNN.pkl', 'rb'))
 print("models loeaded success")
 
+le_list = [job_LE,
+            marital_LE,
+            education_LE,
+            default_LE,
+            housing_LE,
+            loan_LE,
+            contact_LE,
+            month_LE,
+            poutcome_LE]
+
 #app
 app = Flask(__name__)
 #route
@@ -63,15 +73,6 @@ def main():
                         contact,
                         month,
                         poutcome]
-        le_list = [job_LE,
-                        marital_LE,
-                        education_LE,
-                        default_LE,
-                        housing_LE,
-                        loan_LE,
-                        contact_LE,
-                        month_LE,
-                        poutcome_LE]
         x_le_list = [] # под закодированные признаки
         for i in range(len(x_cat_list)):
             x_cat = le_list[i].transform([x_cat_list[i]])[0] #0 чтобы забрать значение из массива
@@ -115,7 +116,33 @@ def api_message():
 
 @app.route('/api/v2/add_message/', methods = ['POST', 'GET'])
 def api_message_v2():
-    return 'api в  разрабоке'
+    get_message_x = request.json
+    X_api = get_message_x['X_from_desktop'][0]
+    x_cat_list = X_api[:9]
+    print(x_cat_list)
+    x_num = X_api[9:]
+    print(x_num)
+    x_le_list = [] # под закодированные признаки
+    for i in range(len(x_cat_list)):
+        x_cat = le_list[i].transform([x_cat_list[i]])[0] #0 чтобы забрать значение из массива
+        x_le_list.append(x_cat)
+    print("x_le_list", x_le_list)
+        #собираем общий X
+    X = [] 
+    X.extend(x_le_list)
+    X.extend(x_num)
+    #scaler
+    X_scaled = num_scaler.transform([X])
+    print('X_scaled:', X_scaled)
+    #predict
+    pediction = kNN.predict(X_scaled)
+    
+    #return result
+    if pediction == 0:
+        result = "Извините мы не можем выдать вам кредит"
+    else:
+        result = "Поздравляем, кредит одобрен!"
+    return jsonify(str(result))
 
 if __name__ == '__main__':
     app.run(debug=True)
