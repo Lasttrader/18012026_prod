@@ -6,3 +6,6 @@
 2.1. anaconda  - conda activate 180126
 2.2. python - source 180126/bin/activate
 
+3. закинуть модели в директории с моделями
+
+
