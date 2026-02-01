@@ -1,5 +1,6 @@
 #import
 import pickle
+import openai
 
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
@@ -8,6 +9,35 @@ from flask import (Flask, # сервер
                    request, #обработка запросов
                    jsonify)  #для отработки APi запросов и возвращение в фомрате JSON
 print("import success")
+
+YANDEX_CLOUD_FOLDER = ""
+YANDEX_CLOUD_API_KEY = ""
+YANDEX_CLOUD_MODEL = "aliceai-llm/latest"
+
+DEEPSEEK_API_KEY = ''
+
+yaGPTinstruction = '''ты очень приветливый специалист банка, 
+                      твоя задача формировать ответные письма клиентам
+                      ты очень дружелюбный и отвечаешь всегда стихами. 
+                      если тебе придет сообщение ДА, то тогда напиши восторженный стишок, 
+                      для клиента о том что ему одобрен кредит.
+                      Если придет ответ НЕТ, то напиши грустный стишок для клиента, 
+                      и рекомендации обратиться попозже. 
+                      Не забывай в сответе каждую строку делать с новой строки.
+                      '''
+
+deepseekInstruction = '''Ты очень классный специалист банка, который готовит ответы для клиентов,
+                        тебе будут приходить два ответа, да или нет. 
+                        если придет ДА, то напиши восторженный грузинский тост, 
+                        пожеланием использовать полученный кредит в самом лучшем виде. 
+                        Если получишь ответ НЕТ, то напиши грузинсккий тост о том, что всё еще в переди'''
+
+deepseekanalytics = '''Ты супер аналитик твоя заача анализировать банковские документы и выдавать сводынй отчет, 
+            чтобы убедиться, что данные о заемщиках верные, 
+            также ты генерируещшь отчет в ледующем виде:
+            1. о чем эти данные?
+            2. какие основные закономенрности ты видишь?
+            3. какие выводы и рекомендации ты можешь сделать относительно анализа данных'''
 
 #load models
 job_LE = pickle.load(open('../flaskApp/tech_models/job_LE.pkl', 'rb'))
@@ -33,6 +63,14 @@ le_list = [job_LE,
             contact_LE,
             month_LE,
             poutcome_LE]
+
+#YaGPT client
+clientYa = openai.OpenAI(
+    api_key=YANDEX_CLOUD_API_KEY,
+    base_url="https://rest-assistant.api.cloud.yandex.net/v1",
+    project=YANDEX_CLOUD_FOLDER)
+#deepseekclient client
+clientDS = openai.OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
 #app
 app = Flask(__name__)
@@ -95,11 +133,21 @@ def main():
         
         #return result
         if pediction == 0:
-            result = "Извините мы не можем выдать вам кредит"
+            result = "НЕТ"
         else:
-            result = "Поздравляем, кредит одобрен!"
+            result = "ДА"
+
+        # generate GPT answer
+
+        response = clientYa.responses.create(
+            model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
+            temperature=0.94,
+            instructions=yaGPTinstruction,
+            input = result,
+            max_output_tokens=500)
+
         
-        return render_template('result.html', result = result)
+        return render_template('result.html', result=response.output_text)
 
 @app.route('/api/v1/add_message/', methods = ['POST', 'GET'])
 def api_message():
@@ -111,7 +159,15 @@ def api_message():
         result = "Извините мы не можем выдать вам кредит"
     else:
         result = "Поздравляем, кредит одобрен!"
-    return jsonify(str(result))
+    response = clientDS.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", 
+             "content": deepseekInstruction},
+             {"role": "user", 
+              "content": result},],
+              stream=False)
+    return jsonify(str(response.choices[0].message.content))
 
 
 @app.route('/api/v2/add_message/', methods = ['POST', 'GET'])
@@ -143,6 +199,25 @@ def api_message_v2():
     else:
         result = "Поздравляем, кредит одобрен!"
     return jsonify(str(result))
+
+@app.route('/api/v3/add_message/', methods = ['POST', 'GET'])
+def api_message_v3():
+    get_file = request.json
+    file_for_analyze = get_file['file'][0]
+    
+    response = clientDS.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", 
+             "content": deepseekanalytics},
+             {"role": "user", 
+              "content": file_for_analyze},],
+              stream=False)
+    return jsonify(str(response.choices[0].message.content))
+
+
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
